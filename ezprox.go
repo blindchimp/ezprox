@@ -15,14 +15,12 @@ func die() {
 
 var watchdog *time.Timer;
 
-func startWatchdog(d int) {
-	go func(d int) {
-		if watchdog == nil {
-			watchdog = time.AfterFunc(time.Duration(d) * time.Second, die)
-		} else {
-			watchdog.Reset(time.Duration(d) * time.Second)
-		}
-	} (d)
+func startWatchdog(wd **time.Timer, d int) {
+	if *wd == nil {
+		*wd = time.AfterFunc(time.Duration(d) * time.Second, die)
+	} else {
+		(*wd).Reset(time.Duration(d) * time.Second)
+	}
 }
 
 func rendevous(lsock net.Listener, c chan net.Conn) {
@@ -48,8 +46,9 @@ func rendevousCont(lsock net.Listener, c chan net.Conn) {
 
 func shovel(rd net.Conn, wr net.Conn, dieHard bool) {
 	buf := make([]byte, 8192)
+	var watchdog *time.Timer
 	for {
-		startWatchdog(1200)
+		startWatchdog(&watchdog, 1200)
 		n, err := rd.Read(buf)
 		if err != nil {
 			if dieHard {
@@ -103,7 +102,7 @@ func fauxXferOut(callerAddr string, calleeAddr string) string {
 
 
 func main() {
-	startWatchdog(3)
+	startWatchdog(&watchdog, 3)
 	var dir string
 	flag.StringVar(&dir, "c", "/tmp", "directory to change to")
 	flag.Parse()
@@ -145,7 +144,7 @@ func main() {
 	infoConn.Close()
 	std.Close()
 
-	startWatchdog(30)
+	startWatchdog(&watchdog, 30)
 
 
 	// note: the first rendevous is for a control
