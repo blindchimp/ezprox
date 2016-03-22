@@ -169,6 +169,7 @@ func main() {
 	var c2Chan chan net.Conn = make(chan net.Conn, 4)
 	go rendevousCont(callerSock, c1Chan)
 	go rendevousCont(calleeSock, c2Chan)
+	watchdog.Stop()
 	for {
 		// loop just pairing up connections as they come in.
 		// if something happens where we get stuck with nothing in
@@ -182,12 +183,24 @@ func main() {
 		var c2 net.Conn
 		select {
 		case c1 = <-c1Chan :
-			c2 = <-c2Chan
+			select {
+				case c2 = <-c2Chan : {
+				}
+				case <- time.After(time.Second * 30) :
+					c1.Close()
+					continue
+				}
 
 		case c2 = <-c2Chan :
-			c1 = <-c1Chan
+			select {
+				case c1 = <-c1Chan : {
+				}
+				case <- time.After(time.Second * 30) :
+					c2.Close()
+					continue
+				}
 
-		case <- time.After(time.Second * 300) :
+		case <- time.After(time.Second * 3) :
 			continue
 		}
 		go shovel(c1, c2, false)
