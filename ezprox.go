@@ -1,5 +1,30 @@
+// This program implements an app-specific network relay.
+//
+// This process is used to relay control connections and audio and video
+// data streams between dwyco applications. It is used in situations
+// where the two client applications cannot connect directly to each
+// other.
+//
+// Normally, this process is invoked by something like xinetd at the
+// request of a local server that is assisting in connecting two clients.
+// This process allocates some sockets, and relays the port information
+// to the requesting server (on socket 0, if invoked by xinetd.)
+// The server then relays the port information to the clients.
+// The clients then initiate connections directly to this relay, which
+// sets up clear channels between the sockets, and simply shovels
+// data between the sockets.
+// Multiple connections are assumed, the first is a "control connection"
+// which is treated specially. If there are any errors or timeouts on
+// this connection, the entire relay process is terminated.
+// Other subsequent connections are treated more leniently, since they
+// are expected to come and go as a normal part of the client
+// communications. This process terminates after 1 hour, as a safety
+// measure.
+//
+// Dwyco, Inc.
+// Tue Mar 29 12:28:46 MST 2016
+//
 package main
-
 
 import (
 "net"
@@ -33,7 +58,7 @@ func rendevous(lsock net.Listener, c chan net.Conn) {
 
 }
 
-// accept connection continuously
+// accept connections continuously
 func rendevousCont(lsock net.Listener, c chan net.Conn) {
 	for {
 		conn, err := lsock.Accept()
@@ -44,11 +69,23 @@ func rendevousCont(lsock net.Listener, c chan net.Conn) {
 	}
 }
 
+// shovel data from the rd connection to the write connection.
+// on error, if dieHard is true, just quit the process.
+// otherwise, just close the connections and terminate the goroutine
+// 
+// timeouts: if dieHard is true, a short timeout is used because
+// we know the protocol on that set of connections is pinging at
+// regular intervals.
+// otherwise, just let the global watchdog run, and kill the
+// process after an hour or so (this keeps situations where someone
+// walks away and leaves video streaming, for example.)
 func shovel(rd net.Conn, wr net.Conn, dieHard bool) {
 	buf := make([]byte, 8192)
 	var watchdog *time.Timer
 	for {
-		startWatchdog(&watchdog, 1200)
+		if dieHard {
+			startWatchdog(&watchdog, 1200)
+		}
 		n, err := rd.Read(buf)
 		if err != nil {
 			if dieHard {
@@ -169,7 +206,10 @@ func main() {
 	var c2Chan chan net.Conn = make(chan net.Conn, 4)
 	go rendevousCont(callerSock, c1Chan)
 	go rendevousCont(calleeSock, c2Chan)
-	watchdog.Stop()
+
+	// just completely die after an hour
+	//watchdog.Stop()
+	startWatchdog(&watchdog, 3600)
 	for {
 		// loop just pairing up connections as they come in.
 		// if something happens where we get stuck with nothing in
