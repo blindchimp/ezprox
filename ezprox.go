@@ -181,7 +181,9 @@ func main() {
 	infoConn.Close()
 	std.Close()
 
-	startWatchdog(&watchdog, 30)
+	// increase to 2 minutes in case it is a glacial phone
+	// trying to get connected.
+	startWatchdog(&watchdog, 120)
 
 
 	// note: the first rendevous is for a control
@@ -226,7 +228,7 @@ func main() {
 			select {
 				case c2 = <-c2Chan : {
 				}
-				case <- time.After(time.Second * 30) :
+				case <- time.After(time.Second * 120) :
 					c1.Close()
 					continue
 				}
@@ -235,7 +237,7 @@ func main() {
 			select {
 				case c1 = <-c1Chan : {
 				}
-				case <- time.After(time.Second * 30) :
+				case <- time.After(time.Second * 120) :
 					c2.Close()
 					continue
 				}
